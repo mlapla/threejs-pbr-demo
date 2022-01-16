@@ -105,26 +105,27 @@ float gaussienNDF(in float NdotH, in float A, in float b){
 }
 
 float ggxNDF(in float NdotH, in float A, in float b){
-	return A / sqrt(1.0 + b*NdotH*NdotH);
+	return clamp(A / ((1.0 + b*NdotH*NdotH)*(1.0 + b*NdotH*NdotH)),0.0,1.0);
 }
 
 float trowbridgeReitzNDF(in float NdotH, in float A, in float b){
-	float d = 1.0 + b*NdotH*NdotH;
-	return A / (d*d);
+	return ggxNDF(NdotH, A, b);
 }
 
 float trowbridgeReitzAnisotropicNDF(in float NdotH, in float TdotH, in float BdotH, 
 									in float A, in float x, in float y){	//TODO Verify
-	float anisotropy = sqrt(TdotH / x) + sqrt(BdotH / y);
-	return A / max(EPSILON, sqrt(anisotropy + NdotH*NdotH));
-}
+	float anisotropy = (TdotH / x)*(TdotH / x) + (BdotH / y)*(BdotH / y);
+	anisotropy *= (1.0 - NdotH*NdotH);
+	anisotropy += NdotH*NdotH;
+	return clamp(A / (anisotropy * anisotropy),0.0,1.0);
+} 
 
 float wardAnisotropicNDF(in float NdotL, in float NdotV,
 						in float NdotH, in float TdotH, in float BdotH, 
 						in float A, in float x, in float y){	//TODO Verify
-	float anisotropy = sqrt(TdotH / x) + sqrt(BdotH / y);
+	float anisotropy = (TdotH / x)*(TdotH / x) + (BdotH / y)*(BdotH / y);
 	float amplitude = A / max(EPSILON, sqrt(NdotL * NdotV));
-	return amplitude * exp(-anisotropy/max(EPSILON,sqrt(NdotH)));
+	return clamp(amplitude * exp(-anisotropy/NdotH*NdotH),0.0,1.0);
 }
 
 ///////////////////////////////////
@@ -144,7 +145,7 @@ float ashikhminPremozeGSF(in float NdotL, in float NdotV){
 
 float duerGSF(in vec3 lightDirection, in vec3 viewDirection, in vec3 normalDirection){
 	vec3 lv = lightDirection + viewDirection;	// TODO Verify
-	return dot(lv,lv)/(dot(lv, normalDirection)*dot(lv, normalDirection));
+	return min(1.0,dot(lv,lv) * pow(dot(lv, normalDirection),-4.0));
 }
 
 float neumannGSF(in float NdotL, in float NdotV){
@@ -169,7 +170,7 @@ float wardGSF(in float NdotL, in float NdotV){
 }
 
 float kurtGSF(in float NdotL, in float NdotV, in float VdotH, in float roughness){
-	return NdotL*NdotV / (VdotH * pow(NdotL*NdotV, roughness));
+	return max(EPSILON,NdotL*NdotV / (VdotH * pow(NdotL*NdotV, roughness)));
 }
 
 float smithGSF(in float x, in float alpha){
@@ -224,19 +225,13 @@ float schlickApprox(in float x){
 	return x + (1.0 - x) * pow(1.0 - x, 5.0);
 }
 
-// float schlickFF(in float NdotL, in float NdotV, in float LdotH, in float roughness){
-// 	float schlickL = schlickApprox(NdotL);
-// 	float schlickV = schlickApprox(NdotV);
-// 	float grazing = 0.5 + 2.0 * roughness * LdotH*LdotH;
-// 	return mix(1.0, grazing, schlickL) * mix(1.0, grazing, schlickV);
-// }
-
 vec3 schlickFF(in float LdotH, in vec3 color){
 	return color + (1.0 - color)*schlickApprox(LdotH);
 }
 
 vec3 schlickIoRFF(in float LdotH, in float ior){
-	float k = (ior - 1.0)*(ior - 1.0) / ((ior + 1.0)*(ior + 1.0));
+	float k = (ior - 1.0) / (ior + 1.0);
+	k = k*k;
 	return vec3(k + (1.0 - k)*schlickApprox(LdotH));
 }
 
@@ -262,8 +257,8 @@ void main() {
 	float NdotL = max(0.0, dot(normalDirection, lightDirection));
 	float NdotV = max(0.0, dot(normalDirection, viewDirection));
 	float NdotH = max(0.0, dot(normalDirection, halfDirection));
-	float TdotH = max(0.0, dot(tangentDirection, halfDirection));
-	float BdotH = max(0.0, dot(bitangentDirection, halfDirection));
+	float TdotH = max(0.0, dot(normalize(tangentDirection), halfDirection));
+	float BdotH = max(0.0, dot(normalize(bitangentDirection), halfDirection));
 
 	float LdotV = max(0.0, dot(lightDirection, viewDirection));
 	float LdotH = max(0.0, dot(lightDirection, halfDirection));
@@ -277,9 +272,11 @@ void main() {
 	// Material properties
 	float roughness = 1.0 - (material.glossiness * material.glossiness);
 	roughness = roughness*roughness;
+	float metalness = material.metalness*material.metalness;
 
-	vec3 diffuseColor = (1.0 - material.metalness) * material.color + material.metalness * env;
-	vec3 specularColor = mix( material.specularColor, material.color, 0.5*material.metalness);
+	vec3 ambientColor = ambientLightColor * (material.color + metalness * env);
+	vec3 diffuseColor = (1.0 - metalness) * material.color + metalness * env;
+	vec3 specularColor = mix( material.specularColor, material.color, 0.5*metalness);
 
 
 	// Normal Distribution Functions
@@ -306,7 +303,7 @@ void main() {
 		NDF = gaussienNDF(NdotH, A, b);
 	}
 	else if (ndfType == 5){
-		float A = sqrt(roughness)/PI;
+		float A = roughness*roughness/PI;
 		float b = roughness*roughness - 1.0;
 		NDF = ggxNDF(NdotH, A, b);
 	}
@@ -316,15 +313,17 @@ void main() {
 		NDF = trowbridgeReitzNDF(NdotH, A, b);
 	}
 	else if (ndfType == 7){
-		float A = 1.0 / (PI * (1.0 - material.glossiness));
-		float x = max(EPSILON, 5.0 * sqrt(1.0 - material.glossiness) / material.aspect);
-		float y = max(EPSILON, 5.0 * sqrt(1.0 - material.glossiness) * material.aspect);
+		float k = 1.0 - material.glossiness;
+		float x = max(EPSILON, 5.0 * k*k / material.aspect);
+		float y = max(EPSILON, 5.0 * k*k * material.aspect);
+		float A = 1.0 / (PI * x*y);
 		NDF = trowbridgeReitzAnisotropicNDF(NdotH, TdotH, BdotH, A, x, y);
 	}
 	else if (ndfType == 8){
-		float A = 1.0 / (4.0*PI * (1.0 - material.glossiness));
-		float x = max(EPSILON, 5.0 * sqrt(1.0 - material.glossiness) / material.aspect);
-		float y = max(EPSILON, 5.0 * sqrt(1.0 - material.glossiness) * material.aspect);
+		float k = 1.0 - material.glossiness;
+		float x = max(EPSILON, 5.0 * k*k / material.aspect);
+		float y = max(EPSILON, 5.0 * k*k * material.aspect);
+		float A = 1.0 / (4.0*PI * x*y);
 		NDF = wardAnisotropicNDF(NdotL, NdotV, NdotH, TdotH, BdotH, A, x, y);
 	}
 
@@ -360,7 +359,7 @@ void main() {
 		GSF = wardGSF(NdotL, NdotV);
 	}
 	else if (gsfType == 10){
-		GSF = kurtGSF(NdotL, NdotV, NdotH, VdotH);
+		GSF = kurtGSF(NdotL, NdotV, VdotH, roughness);
 	}
 	else if (gsfType == 11){
 		GSF = walterGSF(NdotL, NdotV, roughness);
@@ -392,12 +391,10 @@ void main() {
 	}
 
 	// Lighting
-	float lightAttenuation = 4.0*3.1415*distance2(light.pos,pos);
+	// float lightAttenuation = 4.0*3.1415*distance2(light.pos,pos);
 
-	vec3 specularity = NDF * GSF * FF / (4.0 * NdotL*NdotV);
-	vec3 color = (diffuseColor + specularity) * NdotL * light.color;
-
-	//Placeholder color
+	vec3 specularity = NDF * GSF * FF / (4.0 * NdotV);
+	vec3 color = ambientColor + ((diffuseColor * NdotL + specularity) * light.color);
 
 	gl_FragColor = vec4( color, 1.0 );
 }

@@ -1,14 +1,14 @@
 import * as THREE from './build/three.module.js';
 
 import {OrbitControls} from './js/jsm/controls/OrbitControls.js';
-import { GUI } from '/js/jsm/libs/dat.gui.module.js'
+import { GUI } from '/js/jsm/libs/dat.gui.module.js';
 
 const textureLoader = new THREE.TextureLoader();
 const shaderLoader = new THREE.FileLoader();
 let renderer, camera, scene;
 const clock = new THREE.Clock();
 
-let gui;
+let gui, guiAspect, guiIOR;
 let guiLightFolder,guiMaterialFolder;
 
 // NDF options
@@ -62,7 +62,7 @@ let ffTypeNames = [
 let ffNameToIndex = {}; ffTypeNames.forEach((name,idx)=>{ffNameToIndex[name] = idx;})
 
 // Material Data
-const SPHERE_HEIGHT = 1.9;
+const SPHERE_HEIGHT = 3;
 const SPHERE_RADIUS = 2;
 
 let materialGUIColor = {color: 0xFFFFFF};
@@ -95,13 +95,13 @@ let directionalLight = {
 };
 let spotLight;
 
-let ambientLightColor = new THREE.Vector3(0.3,0.3,0.3);
+let ambientLightColor = new THREE.Vector3(0.15,0.15,0.15);
 
 function init() {
 
 	// Init Camera
 	camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000);
-	camera.position.set(8,8, 8);
+	camera.position.set(8,8,8);
 	
 	// Init Scene
 	scene = new THREE.Scene();
@@ -116,7 +116,7 @@ function init() {
 	
 	// Init Props
 	addLights(scene);
-	addFloor(scene);
+	addWalls(scene);
 	addProps(scene);
 	addSphere(scene);
 
@@ -135,8 +135,8 @@ function initGUI(){
 	guiMaterialFolder.addColor(materialGUISpecularColor,'specularColor').onChange(onMaterialSpecularColoring);
 	guiMaterialFolder.add(sphereMaterial.value,'metalness',0,1);
 	guiMaterialFolder.add(sphereMaterial.value,'glossiness',0,1);
-	guiMaterialFolder.add(sphereMaterial.value,'aspect',0.1,5);
-	guiMaterialFolder.add(sphereMaterial.value,'ior',1.0,4.0);
+	// guiAspect = guiMaterialFolder.add(sphereMaterial.value,'aspect',0.1,5);
+	// guiIOR = guiMaterialFolder.add(sphereMaterial.value,'ior',1.0,4.0);
 	guiMaterialFolder.open();
 
 	guiLightFolder = gui.addFolder('Light Position');
@@ -150,7 +150,7 @@ function initRenderer(){
 	renderer = new THREE.WebGLRenderer({antialias: true});
 	renderer.setPixelRatio(window.devicePixelRatio);
 	renderer.setSize(window.innerWidth, window.innerHeight);
-	
+	renderer.shadowMap.enabled = true;
 	// Append to window
 	const container = document.createElement('div');
 	document.body.appendChild(container);
@@ -158,21 +158,55 @@ function initRenderer(){
 
 	// Enable mouse control
 	const controls = new OrbitControls(camera, renderer.domElement);
-	controls.target.set(0, 0, 0);
+	controls.target.set(0, SPHERE_HEIGHT, 0);
+	controls.maxPolarAngle = Math.PI/2 - 0.1
+	controls.minPolarAngle = 0
 	controls.update();
 
 }
 
-function addFloor(scene){
+function addWall(scene, x,y,z, rot, color){
+	const wall = new THREE.Mesh(
+		new THREE.PlaneGeometry(60, 60), 
+		new THREE.MeshPhongMaterial({color: color, shininess: 10, depthWrite: true})
+	);
+	wall.position.x = x;
+	wall.position.y = y;
+	wall.position.z = z;
+	wall.rotation.y = rot;
+	wall.castShadow = true;
+	wall.receiveShadow = true;
+
+	const back = new THREE.Mesh(
+		new THREE.PlaneGeometry(60, 60), 
+		new THREE.MeshPhongMaterial({color: 0x333333, shininess: 10, depthWrite: true})
+	);
+	back.position.x = x;
+	back.position.y = y;
+	back.position.z = z;
+	back.rotation.y = rot + Math.PI;
+	back.castShadow = true;
+	back.receiveShadow = true;
+
+	scene.add(wall);
+	scene.add(back);
+}
+
+function addWalls(scene){
 	const ground = new THREE.Mesh(
-		new THREE.PlaneGeometry(100000, 100000), 
+		new THREE.PlaneGeometry(5000, 5000), 
 		new THREE.MeshPhongMaterial({color: 0x100D1A + 0x101010, shininess: 10, depthWrite: true})
 	);
-	ground.rotation.x = - Math.PI / 2;
-	ground.position.y = -1;
-	ground.castShadow = true
-	ground.receiveShadow = true
+	ground.rotation.x = - Math.PI/2;
+	ground.castShadow = true;
+	ground.receiveShadow = true;
+
 	scene.add(ground);
+
+	addWall(scene, 0,0,-30,0,0x33EE33);
+	addWall(scene, 0,0,30,Math.PI,0xEEEEEE);
+	addWall(scene, -30,0,0,Math.PI/2,0xEE3333);
+	addWall(scene, 30,0,0,-Math.PI/2,0x3333EE);
 
 	const grid = new THREE.GridHelper(200, 20, 0x000000, 0x000000);
 	scene.add(grid);
@@ -180,14 +214,17 @@ function addFloor(scene){
 
 function addLights(scene){
 	//Add Ambient Light
-	const hemiLight = new THREE.HemisphereLight(ambientLightColor, ambientLightColor, 1.0);
-	hemiLight.position.set(0, 200, 0);
-	scene.add(hemiLight);
+	// const hemiLight = new THREE.HemisphereLight(ambientLightColor, ambientLightColor, 1.0);
+	// hemiLight.position.set(0, 20, 0);
+	// scene.add(hemiLight);
+	const ambientlight = new THREE.AmbientLight('white', 1);
+	scene.add(ambientlight);
 
 	//Add Directional Light
 	spotLight = new THREE.DirectionalLight(directionalLight.value.color, 1.0);
 	spotLight.position.set(0, 10, 0);
-	spotLight.target.position.set(0, 0, 0);
+	spotLight.target.position.set(0, SPHERE_HEIGHT, 0);
+	spotLight.castShadow = true;
 	scene.add(spotLight);
 	scene.add(spotLight.target);
 	directionalLight.value.pos.copy(spotLight.position);
@@ -206,7 +243,6 @@ function addSphere(scene) {
 			envMapCube: {type: 't', value: sphereEnvMapRenderTarget.texture}
 		},
 	});
-	console.log(m)
 	shaderLoader.load('glsl/pbr.fs.glsl', function(data) {
 		m.fragmentShader = data;
 		m.needsUpdate = true;
@@ -221,27 +257,25 @@ function addSphere(scene) {
 	g.computeTangents();
 	const sphere = new THREE.Mesh(g, m);
 	sphere.position.set(0, SPHERE_HEIGHT, 0);
+	sphere.castShadow = true
+	sphere.receiveShadow = true
 	scene.add(sphere);
 }
 
-function addProps(scene){
+function addCube(scene, x,y,z, color){
 	const geometry = new THREE.BoxGeometry();
-	const material = new THREE.MeshPhongMaterial( { color: 0x334455 } );
-	const cube1 = new THREE.Mesh( geometry, material );
-	const cube2 = new THREE.Mesh( geometry, material );
-	const cube3 = new THREE.Mesh( geometry, material );
-	cube1.castShadow = true
-	cube1.receiveShadow = true
-	cube2.castShadow = true
-	cube2.receiveShadow = true
-	cube3.castShadow = true
-	cube3.receiveShadow = true
-	cube1.position.set(4,0,3);
-	cube2.position.set(1,1,7);
-	cube3.position.set(5,2,4);
-	scene.add( cube1 );
-	scene.add( cube2 );
-	scene.add( cube3 );
+	const material = new THREE.MeshPhongMaterial( { color: color } );
+	const cube = new THREE.Mesh( geometry, material );
+	cube.castShadow = true;
+	cube.receiveShadow = true;
+	cube.position.set(x,y,z);
+	scene.add(cube);
+}
+
+function addProps(scene){
+	addCube(scene,-4,3, 3,0x112233);
+	addCube(scene, 1,4, 7,0x223344);
+	addCube(scene, 5,2,-4,0x998877);
 }
 
 function colorHexToVec(hex){
@@ -260,6 +294,16 @@ function onMaterialSpecularColoring(){
 }
 
 function onNDFChoose(){
+	if (ndfNameToIndex[ndfChoice['NDF']] == 7 || ndfNameToIndex[ndfChoice['NDF']] == 8){
+		if (guiAspect == undefined)
+			guiAspect = guiMaterialFolder.add(sphereMaterial.value,'aspect',0.1,5)
+	}
+	else if (ndfNameToIndex[ndfChoice['NDF']] != 7 || ndfNameToIndex[ndfChoice['NDF']] != 8){
+		if (guiAspect != undefined){
+			guiMaterialFolder.remove(guiAspect);
+			guiAspect = undefined;
+		}
+	}
 	ndfType['value'] = ndfNameToIndex[ndfChoice['NDF']];
 }
 
@@ -268,6 +312,12 @@ function onGSFChoose(){
 }
 
 function onFFChoose(){
+	if (ffNameToIndex[ffChoice['Fresnel']] == 2)
+		guiIOR = guiMaterialFolder.add(sphereMaterial.value,'ior',1.0,4.0);
+	else if (guiIOR != undefined){
+		guiMaterialFolder.remove(guiIOR);
+		guiIOR = undefined;
+	}
 	ffType['value'] = ffNameToIndex[ffChoice['Fresnel']];
 }
 

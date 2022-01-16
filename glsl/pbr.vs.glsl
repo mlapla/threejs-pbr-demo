@@ -48,8 +48,8 @@ void main() {
 	texCoord = uv;
 	pos = (modelViewMatrix * vec4(position,1.0)).xyz;
 	normalDirection = normalMatrix * normal;
-	tangentDirection = normalMatrix * tangent;
-	bitangentDirection = cross(tangentDirection, normalDirection);
+	tangentDirection = normalize((modelViewMatrix * vec4(tangent,1.0)).xyz);
+	bitangentDirection = cross(normalDirection, tangentDirection);
 
 	vec4 relativeVertexPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * relativeVertexPosition;
