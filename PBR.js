@@ -273,9 +273,9 @@ function addCube(scene, x,y,z, color){
 }
 
 function addProps(scene){
-	addCube(scene,-4,3, 3,0x112233);
-	addCube(scene, 1,4, 7,0x223344);
-	addCube(scene, 5,2,-4,0x998877);
+	// addCube(scene,-4,3, 3,0x112233);
+	// addCube(scene, 1,4, 7,0x223344);
+	// addCube(scene, 5,2,-4,0x998877);
 }
 
 function colorHexToVec(hex){
