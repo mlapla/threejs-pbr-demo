@@ -1,13 +1,14 @@
 import * as THREE from './build/three.module.js';
-
 import {OrbitControls} from './js/jsm/controls/OrbitControls.js';
 import { GUI } from '/js/jsm/libs/dat.gui.module.js';
 
-const textureLoader = new THREE.TextureLoader();
 const shaderLoader = new THREE.FileLoader();
+
+// Scene
 let renderer, camera, scene;
 const clock = new THREE.Clock();
 
+// GUI
 let gui, guiAspect, guiIOR;
 let guiLightFolder,guiMaterialFolder;
 
@@ -27,7 +28,7 @@ let ndfTypeNames = [
 ];
 let ndfNameToIndex = {}; ndfTypeNames.forEach((name,idx)=>{ndfNameToIndex[name] = idx;})
 
-// GSF ooptions
+// GSF options
 let gsfType = {value: 1};
 let gsfChoice = {'GSF':'Implicit'};
 let gsfTypeNames = [
@@ -94,9 +95,11 @@ let directionalLight = {
 	}
 };
 let spotLight;
-
 let ambientLightColor = new THREE.Vector3(0.15,0.15,0.15);
 
+/**
+ * Initialization function for the scene and the GUI.
+ */
 function init() {
 
 	// Init Camera
@@ -124,6 +127,9 @@ function init() {
 	initGUI();
 }
 
+/**
+ * GUI initialization function. Hooks variables changes to GUI changes.
+ */
 function initGUI(){
 	gui = new GUI()
 	gui.add(ndfChoice,'NDF',ndfTypeNames).onChange(onNDFChoose);
@@ -145,6 +151,10 @@ function initGUI(){
 	guiLightFolder.open();
 }
 
+/**
+ * Renderer and orbit controls initialization. Appends the renderer
+ * to the canvas.
+ */
 function initRenderer(){
 	// Create renderer
 	renderer = new THREE.WebGLRenderer({antialias: true});
@@ -162,9 +172,17 @@ function initRenderer(){
 	controls.maxPolarAngle = Math.PI/2 - 0.1
 	controls.minPolarAngle = 0
 	controls.update();
-
 }
 
+/**
+ * Adds a (two-sided) wall to the scene, of fixed size 60x60.
+ * @param scene the scene to which to add the wall.
+ * @param x 	horizontal position of the wall.
+ * @param y 	vertical (altitude) position of the wall.
+ * @param z 	forwards/backwards position of the wall.
+ * @param rot 	rotation of the wall relative to the y axis.
+ * @param color color of the wall
+ */
 function addWall(scene, x,y,z, rot, color){
 	const wall = new THREE.Mesh(
 		new THREE.PlaneGeometry(60, 60), 
@@ -177,6 +195,7 @@ function addWall(scene, x,y,z, rot, color){
 	wall.castShadow = true;
 	wall.receiveShadow = true;
 
+	// Add second-side so the wall is 2 sided
 	const back = new THREE.Mesh(
 		new THREE.PlaneGeometry(60, 60), 
 		new THREE.MeshPhongMaterial({color: 0x333333, shininess: 10, depthWrite: true})
@@ -192,6 +211,10 @@ function addWall(scene, x,y,z, rot, color){
 	scene.add(back);
 }
 
+/**
+ * Adds a floor and a collection of walls to the scene to make a room.
+ * @param scene the scene in which the walls are added.
+ */
 function addWalls(scene){
 	const ground = new THREE.Mesh(
 		new THREE.PlaneGeometry(5000, 5000), 
@@ -212,6 +235,10 @@ function addWalls(scene){
 	scene.add(grid);
 }
 
+/**
+ * Adds lighting to the scene
+ * @param scene the scene to which the lighting is added.
+ */
 function addLights(scene){
 	//Add Ambient Light
 	// const hemiLight = new THREE.HemisphereLight(ambientLightColor, ambientLightColor, 1.0);
@@ -230,6 +257,10 @@ function addLights(scene){
 	directionalLight.value.pos.copy(spotLight.position);
 }
 
+/**
+ * Adds the central sphere with PBR shading.
+ * @param scene the scene to which the sphere is added.
+ */
 function addSphere(scene) {
 		
 	const m = new THREE.ShaderMaterial({
@@ -262,6 +293,14 @@ function addSphere(scene) {
 	scene.add(sphere);
 }
 
+/**
+ * (DEPRECATED) Adds a cube to the scene.
+ * @param scene the scene to which the cube is added
+ * @param x horizontal position of the cube
+ * @param y vertical (altitude) position of the cube
+ * @param z forwards/backwards position of the cube
+ * @param color color of the cube
+ */
 function addCube(scene, x,y,z, color){
 	const geometry = new THREE.BoxGeometry();
 	const material = new THREE.MeshPhongMaterial( { color: color } );
@@ -272,27 +311,38 @@ function addCube(scene, x,y,z, color){
 	scene.add(cube);
 }
 
-function addProps(scene){
-	// addCube(scene,-4,3, 3,0x112233);
-	// addCube(scene, 1,4, 7,0x223344);
-	// addCube(scene, 5,2,-4,0x998877);
-}
-
+/**
+ * Converts color from a given hexadecimal value to a ThreeJS Vector.
+ * @param hex the color in hexadecimal form.
+ * @return 3-vector containing Red, Green, Blue values.
+ */
 function colorHexToVec(hex){
 	const color = new THREE.Color(hex);	
 	return new THREE.Vector3(color.r,color.g,color.b);
 }
 
+/**
+ * Event hook changing the internal value of the sphere's color
+ * when the GUI is interacted with.
+ */
 function onMaterialColoring(){
 	const c = colorHexToVec(materialGUIColor.color);
 	sphereMaterial.value.color.copy(c);
 }
 
+/**
+ * Event hook changing the internal value of the sphere's specular
+ * color when the GUI is interacted with.
+ */
 function onMaterialSpecularColoring(){
 	const c = colorHexToVec(materialGUISpecularColor.specularColor);
 	sphereMaterial.value.specularColor.copy(c);
 }
 
+/**
+ * Event hook changing the internal value of the sphere's microfacted
+ * distribution when the GUI is interacted with.
+ */
 function onNDFChoose(){
 	if (ndfNameToIndex[ndfChoice['NDF']] == 7 || ndfNameToIndex[ndfChoice['NDF']] == 8){
 		if (guiAspect == undefined)
@@ -307,10 +357,18 @@ function onNDFChoose(){
 	ndfType['value'] = ndfNameToIndex[ndfChoice['NDF']];
 }
 
+/**
+ * Event hook changing the internal value of the sphere's geometric
+ * shadowing function when the GUI is interacted with.
+ */
 function onGSFChoose(){
 	gsfType['value'] = gsfNameToIndex[gsfChoice['GSF']];
 }
 
+/**
+ * Event hook changing the internal value of the sphere's Fresnel
+ * function when the GUI is interacted with.
+ */
 function onFFChoose(){
 	if (ffNameToIndex[ffChoice['Fresnel']] == 2)
 		guiIOR = guiMaterialFolder.add(sphereMaterial.value,'ior',1.0,4.0);
@@ -321,16 +379,27 @@ function onFFChoose(){
 	ffType['value'] = ffNameToIndex[ffChoice['Fresnel']];
 }
 
+/**
+ * Event hook changing the internal value of the lighting's
+ * rotation when the GUI is interacted with.
+ */
 function onLightRotation(){
 	directionalLight.value.pos.copy(spotLight.position);
 }
 
+/**
+ * Event hook resizing the renderer when the window's
+ * dimensions are changed.
+ */
 function onWindowResize() {
 	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 	renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+/**
+ * Main animation loop.
+ */
 function animate() {
 	requestAnimationFrame(animate);
 	const delta = clock.getDelta();
@@ -339,6 +408,7 @@ function animate() {
     sphereEnvMapCamera.lookAt(camera.position);
 	renderer.render(scene, camera);
 }
+
 
 init();
 animate();

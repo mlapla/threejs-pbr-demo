@@ -45,6 +45,7 @@ void main() {
 	worldPos = position;
 	worldNormal = normal;
 
+	// Geometrics in view coords
 	texCoord = uv;
 	pos = (modelViewMatrix * vec4(position,1.0)).xyz;
 	normalDirection = normalMatrix * normal;
